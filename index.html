@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Capo Invoice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Login -->
+<form class="login" id="loginView" hidden>
+  <div>
+    <div class="lbl">Capo</div>
+    <h1>Capo Invoice</h1>
+    <p class="muted" style="margin:4px 0 0">Masuk pakai akun yang dibuat owner.</p>
+  </div>
+  <label>Email<input id="lEmail" type="email" autocomplete="username" required></label>
+  <label>Password<input id="lPass" type="password" autocomplete="current-password" required></label>
+  <div class="err" id="lErr"></div>
+  <button class="btn primary" type="submit" id="lBtn">Masuk</button>
+</form>
+
+<div class="banner" id="setupBanner" hidden style="max-width:640px;margin:10vh auto 0">
+  Website belum tersambung ke database. Isi <b>SUPABASE_URL</b> dan <b>SUPABASE_ANON_KEY</b> di file <b>config.js</b> (lihat README langkah 2).
+</div>
+
+<!-- App -->
+<div class="wrap" id="appView" hidden>
+  <div class="userbar"><span id="who"></span><button class="btn small" id="btnLogout" type="button">Keluar</button></div>
+  <header>
+    <div>
+      <div class="lbl">Laporan invoice</div>
+      <h1>Capo Invoice</h1>
+      <p id="sub">Ringkasan tagihan, pembayaran, dan margin per bulan.</p>
+    </div>
+    <div class="controls">
+      <label class="lbl" for="month">Tampilkan</label>
+      <select id="month"></select>
+      <button class="btn" id="btnCsv" type="button">Unduh CSV</button>
+      <button class="btn primary" id="btnNew" type="button">+ Invoice baru</button>
+    </div>
+  </header>
+
+  <div class="banner" id="loadErr" hidden></div>
+
+  <section class="strip" id="strip" aria-label="Ringkasan"></section>
+
+  <section style="display:grid;gap:12px">
+    <h2>Status pembayaran</h2>
+    <div class="lanes" id="lanes"></div>
+    <div class="tablebox"><table id="tbl"><thead></thead><tbody></tbody><tfoot></tfoot></table></div>
+    <p class="muted" style="margin:0;font-size:13px">Klik baris untuk lihat detail, catat pembayaran, atau edit.</p>
+  </section>
+
+  <section class="two">
+    <div class="panel">
+      <h2>Piutang terbesar per customer</h2>
+      <div id="cust"></div>
+    </div>
+    <div class="panel">
+      <h2>Perlu dicek</h2>
+      <div id="checks"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Alur kerja tim</h2>
+    <ol class="flow">
+      <li><b>Invoice terbit:</b> klik <b>+ Invoice baru</b>, isi nomor invoice, tanggal, customer, total tagihan, dan total PO (modal ke supplier). Status otomatis jadi <i>Belum bayar</i>.</li>
+      <li><b>Customer transfer DP atau pelunasan:</b> buka invoice-nya, klik <b>Simpan pembayaran</b> dengan nominal dan tanggal sesuai mutasi rekening. Sisa dan status (DP / Lunas) dihitung sendiri.</li>
+      <li><b>PO ke supplier berubah:</b> edit invoice dan perbarui total PO supaya margin tetap akurat.</li>
+      <li><b>Tiap Senin:</b> rapikan semua yang muncul di kotak <i>Perlu dicek</i>.</li>
+      <li><b>Tutup bulan:</b> owner pilih bulan di atas. Ringkasan ini sudah jadi laporan bulanan. Pilih <i>Semua piutang</i> untuk lihat tagihan yang belum lunas dari semua bulan.</li>
+    </ol>
+  </section>
+</div>
+
+<dialog id="dlgInv">
+  <form id="fInv" method="dialog">
+    <h2 id="invTitle">Invoice baru</h2>
+    <label>Nomor invoice<input id="fNo" required placeholder="INV/2026/0110/BNSM/0316" autocomplete="off"></label>
+    <div class="row2">
+      <label>Tanggal invoice<input id="fDate" type="date" required></label>
+      <label>Masuk laporan bulan<input id="fMonth" type="month" required></label>
+    </div>
+    <label>Nama customer<input id="fCust" required autocomplete="off" list="custList"></label>
+    <datalist id="custList"></datalist>
+    <div class="row2">
+      <label>Total tagihan (Rp)<input id="fTotal" inputmode="numeric" required placeholder="7.919.480"></label>
+      <label>Total PO / modal (Rp)<input id="fPo" inputmode="numeric" placeholder="4.419.602"></label>
+    </div>
+    <label>Catatan<input id="fNote" autocomplete="off" placeholder="opsional"></label>
+    <div class="calc" id="invCalc"></div>
+    <div class="err" id="invErr"></div>
+    <div class="actions">
+      <button class="btn danger" type="button" id="btnDel" hidden>Hapus invoice</button>
+      <button class="btn" type="button" data-close>Batal</button>
+      <button class="btn primary" type="submit" id="btnSaveInv">Simpan</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgDet">
+  <form id="fPay" method="dialog">
+    <div>
+      <div class="inv" id="dInv"></div>
+      <h2 id="dCust"></h2>
+    </div>
+    <div class="calc" id="dCalc"></div>
+    <div>
+      <div class="lbl">Riwayat pembayaran</div>
+      <div class="paylist" id="dPays"></div>
+    </div>
+    <div class="lbl" style="margin-top:4px">Catat pembayaran</div>
+    <div class="row2">
+      <label>Nominal (Rp)<input id="pAmt" inputmode="numeric" placeholder="0"></label>
+      <label>Tanggal transfer<input id="pDate" type="date"></label>
+    </div>
+    <label>Keterangan<input id="pNote" placeholder="DP 50%, pelunasan, BCA..." autocomplete="off"></label>
+    <div class="err" id="payErr"></div>
+    <div class="actions">
+      <button class="btn" type="button" id="btnEdit">Edit invoice</button>
+      <button class="btn" type="button" id="btnFull">Isi sisa (lunas)</button>
+      <button class="btn" type="button" data-close>Tutup</button>
+      <button class="btn primary" type="submit" id="btnSavePay">Simpan pembayaran</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
